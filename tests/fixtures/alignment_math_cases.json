@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic math cases for the first documented alignment model.",
+  "cases": [
+    {
+      "id": "east_positive_declination",
+      "purpose": "Verify east-positive magnetic declination is added to magnetic azimuth.",
+      "inputs": {
+        "magnetic_azimuth_deg": 5.0,
+        "magnetic_declination_deg": 12.0,
+        "compass_mount_offset_deg": 0.0,
+        "compass_calibration_offset_deg": 0.0
+      },
+      "expected": {
+        "true_azimuth_deg": 17.0
+      }
+    },
+    {
+      "id": "west_declination_wraparound",
+      "purpose": "Verify west/negative declination wraps correctly below zero.",
+      "inputs": {
+        "magnetic_azimuth_deg": 2.0,
+        "magnetic_declination_deg": -10.0,
+        "compass_mount_offset_deg": 0.0,
+        "compass_calibration_offset_deg": 0.0
+      },
+      "expected": {
+        "true_azimuth_deg": 352.0
+      }
+    },
+    {
+      "id": "local_azimuth_delta_wraparound",
+      "purpose": "Verify signed azimuth delta crosses 0/360 using shortest direction.",
+      "inputs": {
+        "estimated_azimuth_deg": 359.0,
+        "solved_azimuth_deg": 2.0
+      },
+      "expected": {
+        "local_azimuth_delta_deg": 3.0
+      }
+    },
+    {
+      "id": "synthetic_plate_delta",
+      "purpose": "Verify local azimuth and altitude deltas for a simple solved offset.",
+      "inputs": {
+        "estimated_azimuth_deg": 120.0,
+        "estimated_altitude_deg": 35.0,
+        "solved_azimuth_deg": 121.25,
+        "solved_altitude_deg": 34.5
+      },
+      "expected": {
+        "local_azimuth_delta_deg": 1.25,
+        "local_altitude_delta_deg": -0.5
+      }
+    },
+    {
+      "id": "low_altitude_no_refraction",
+      "purpose": "Record the first model's no-refraction approximation at low altitude.",
+      "inputs": {
+        "estimated_azimuth_deg": 180.0,
+        "estimated_altitude_deg": 5.0,
+        "atmospheric_refraction": "disabled"
+      },
+      "expected": {
+        "refraction_model": "none",
+        "status": "degraded"
+      }
+    }
+  ]
+}

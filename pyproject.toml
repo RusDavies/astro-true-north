@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "astro-true-north"
+version = "0.1.0"
+description = "Sensor-assisted, plate-solve-refined telescope alignment software."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Russ Davies" },
+]
+keywords = ["astronomy", "telescope", "alignment", "plate-solving"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+  "astropy>=6.0",
+]
+
+[project.scripts]
+astro-true-north = "astro_true_north.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/astro_true_north"]

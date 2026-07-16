@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "description": "Synthetic, privacy-safe mock inputs for the first Astro True North prototype.",
+  "observing_sites": [
+    {
+      "id": "city_level_reference_site",
+      "latitude_deg": 43.6532,
+      "longitude_deg": -79.3832,
+      "elevation_m": 76.0,
+      "timestamp_utc": "2026-07-14T02:30:00Z",
+      "location_precision": "city-level synthetic fixture",
+      "privacy_policy": "do-not-log-precise-location"
+    }
+  ],
+  "magnetic_corrections": [
+    {
+      "id": "wmm2025_synthetic_west_declination",
+      "site_id": "city_level_reference_site",
+      "model_name": "WMM2025",
+      "model_version": "2025.0 synthetic fixture",
+      "valid_from": "2025-01-01",
+      "valid_until": "2029-12-31",
+      "declination_deg": -10.0,
+      "inclination_deg": 70.0,
+      "field_vector_nt": {
+        "north": 17800.0,
+        "east": -3150.0,
+        "down": 49600.0
+      },
+      "annual_change": {
+        "declination_deg_per_year": 0.05
+      },
+      "uncertainty": {
+        "declination_deg_1sigma": 0.4
+      }
+    }
+  ],
+  "compass_samples": [
+    {
+      "id": "rough_scope_azimuth",
+      "site_id": "city_level_reference_site",
+      "timestamp_utc": "2026-07-14T02:30:02Z",
+      "magnetic_azimuth_deg": 32.0,
+      "calibration_state": "synthetic-calibrated",
+      "uncertainty_deg": 3.0,
+      "sensor_mount_offset_deg": 0.0,
+      "calibration_offset_deg": 0.0,
+      "hard_iron_soft_iron_notes": "synthetic fixture; no local disturbance modeled"
+    }
+  ],
+  "inclinometer_samples": [
+    {
+      "id": "rough_scope_altitude",
+      "site_id": "city_level_reference_site",
+      "timestamp_utc": "2026-07-14T02:30:02Z",
+      "altitude_deg": 41.5,
+      "calibration_state": "synthetic-calibrated",
+      "uncertainty_deg": 1.0,
+      "sensor_mount_offset_deg": 0.0,
+      "calibration_offset_deg": 0.0
+    }
+  ],
+  "camera_frames": [
+    {
+      "id": "synthetic_center_frame",
+      "timestamp_utc": "2026-07-14T02:30:05Z",
+      "source_handle": "synthetic://frame/center",
+      "privacy_policy": "synthetic-no-image-data",
+      "exposure_s": 2.0,
+      "gain": 120,
+      "pixel_width": 1920,
+      "pixel_height": 1080
+    }
+  ],
+  "plate_solutions": [
+    {
+      "id": "synthetic_center_solution",
+      "frame_id": "synthetic_center_frame",
+      "solver_name": "synthetic-fixture",
+      "solver_version": "0",
+      "status": "solved",
+      "ra_deg": 279.234,
+      "dec_deg": 38.783,
+      "frame": "ICRS",
+      "obstime": "2026-07-14T02:30:05Z",
+      "field_of_view_deg": 1.25,
+      "pixel_scale_arcsec": 2.34,
+      "confidence": "fixture-high",
+      "failure_reason": null
+    }
+  ]
+}
