@@ -186,6 +186,22 @@ class GeographicLibMagneticFieldProviderTests(unittest.TestCase):
                 )
             )
 
+    def test_provider_rejects_non_executable_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            executable = pathlib.Path(temp_dir) / "MagneticField"
+            executable.write_text("", encoding="utf-8")
+            provider = GeographicLibMagneticFieldProvider(executable=str(executable))
+
+            with self.assertRaisesRegex(RuntimeError, "executable not found"):
+                provider.calculate(
+                    MagneticModelRequest(
+                        latitude_deg=43.0,
+                        longitude_deg=-79.0,
+                        elevation_m=100.0,
+                        timestamp_utc="2026-07-14T00:00:00Z",
+                    )
+                )
+
 
 @unittest.skipUnless(
     RUN_REAL_GEOGRAPHICLIB_TESTS,
