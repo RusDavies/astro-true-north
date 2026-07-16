@@ -145,6 +145,22 @@ class AstrometryNetSolveFieldProviderTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertIn("executable not found", result.failure_reason or "")
 
+    def test_solve_field_rejects_non_executable_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            frame_path = temp_path / "frame.fits"
+            frame_path.write_bytes(b"fake image bytes")
+            executable = temp_path / "solve-field"
+            executable.write_text("", encoding="utf-8")
+            provider = AstrometryNetSolveFieldProvider(executable=str(executable))
+
+            result = provider.solve(
+                PlateSolverRequest(camera_frame=_camera_frame_for_path(frame_path))
+            )
+
+        self.assertEqual(result.status, "failed")
+        self.assertIn("executable not found", result.failure_reason or "")
+
     def test_solver_process_failure_returns_normalized_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = pathlib.Path(temp_dir)
@@ -246,6 +262,22 @@ class AstapPlateSolverProviderTests(unittest.TestCase):
             provider = AstapPlateSolverProvider(executable="missing-astap")
 
             result = provider.solve(PlateSolverRequest(camera_frame=frame))
+
+        self.assertEqual(result.status, "failed")
+        self.assertIn("executable not found", result.failure_reason or "")
+
+    def test_astap_rejects_non_executable_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            frame_path = temp_path / "frame.fits"
+            frame_path.write_bytes(b"fake image bytes")
+            executable = temp_path / "astap"
+            executable.write_text("", encoding="utf-8")
+            provider = AstapPlateSolverProvider(executable=str(executable))
+
+            result = provider.solve(
+                PlateSolverRequest(camera_frame=_camera_frame_for_path(frame_path))
+            )
 
         self.assertEqual(result.status, "failed")
         self.assertIn("executable not found", result.failure_reason or "")

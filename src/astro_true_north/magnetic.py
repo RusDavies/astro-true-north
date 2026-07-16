@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
+
+_ALLOWED_MAGNETICFIELD_COMMANDS = frozenset({"MagneticField"})
 
 
 @dataclass(frozen=True)
@@ -95,7 +99,11 @@ class GeographicLibMagneticFieldProvider:
                 "GeographicLib MagneticField expects height above the WGS84 ellipsoid"
             )
 
-        command = [self.executable, "-n", self.model_name, "-r", "-p", "8"]
+        resolved_executable = _resolve_magneticfield_executable(self.executable)
+        if resolved_executable is None:
+            raise RuntimeError(f"MagneticField executable not found: {self.executable}")
+
+        command = [resolved_executable, "-n", self.model_name, "-r", "-p", "8"]
         if self.model_directory is not None:
             command.extend(["-d", str(self.model_directory)])
 
@@ -106,7 +114,9 @@ class GeographicLibMagneticFieldProvider:
             f"{request.elevation_m:.3f}\n"
         )
         try:
-            completed = subprocess.run(
+            # argv-only subprocess call after resolving an allowlisted command name
+            # or an explicit executable file path; no shell is involved.
+            completed = subprocess.run(  # nosemgrep
                 command,
                 input=input_line,
                 capture_output=True,
@@ -131,7 +141,7 @@ class GeographicLibMagneticFieldProvider:
             completed.stdout,
             model_name=self.model_name.upper(),
             model_version=self.model_name,
-            source=self.executable,
+            source=resolved_executable,
         )
 
 
@@ -212,6 +222,31 @@ def _parse_float_line(line: str, *, expected: int) -> list[float]:
     if len(values) != expected:
         raise ValueError(f"expected {expected} MagneticField values, got {len(values)}")
     return values
+
+
+def _resolve_magneticfield_executable(executable: str) -> str | None:
+    return _resolve_local_executable(
+        executable,
+        allowed_command_names=_ALLOWED_MAGNETICFIELD_COMMANDS,
+    )
+
+
+def _resolve_local_executable(
+    executable: str,
+    *,
+    allowed_command_names: frozenset[str],
+) -> str | None:
+    path = Path(executable)
+    has_path_component = path.parent != Path(".")
+    if path.name not in allowed_command_names and not has_path_component:
+        return None
+    if has_path_component:
+        return str(path) if path.is_file() and _is_executable(path) else None
+    return shutil.which(executable)
+
+
+def _is_executable(path: Path) -> bool:
+    return path.exists() and path.is_file() and os.access(path, os.X_OK)
 
 
 def _date_only(timestamp_utc: str) -> str:

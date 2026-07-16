@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import Mapping, Protocol
 
 from astropy.io import fits
+
+_ALLOWED_ASTAP_COMMANDS = frozenset({"astap", "astap_cli"})
+_ALLOWED_SOLVE_FIELD_COMMANDS = frozenset({"solve-field"})
 
 
 @dataclass(frozen=True)
@@ -118,7 +122,10 @@ class AstrometryNetSolveFieldProvider:
                 "camera frame path does not exist",
             )
 
-        resolved_executable = _resolve_executable(self.executable)
+        resolved_executable = _resolve_executable(
+            self.executable,
+            allowed_command_names=_ALLOWED_SOLVE_FIELD_COMMANDS,
+        )
         if resolved_executable is None:
             return _failed_solution(
                 request,
@@ -139,7 +146,9 @@ class AstrometryNetSolveFieldProvider:
                 request,
             )
             try:
-                completed = subprocess.run(
+                # argv-only subprocess call after resolving an allowlisted command
+                # name or an explicit executable file path; no shell is involved.
+                completed = subprocess.run(  # nosemgrep
                     command,
                     capture_output=True,
                     check=False,
@@ -213,7 +222,10 @@ class AstapPlateSolverProvider:
                 "camera frame path does not exist",
             )
 
-        resolved_executable = _resolve_executable(self.executable)
+        resolved_executable = _resolve_executable(
+            self.executable,
+            allowed_command_names=_ALLOWED_ASTAP_COMMANDS,
+        )
         if resolved_executable is None:
             return _failed_solution(
                 request,
@@ -239,7 +251,9 @@ class AstapPlateSolverProvider:
                 max_stars=self.max_stars,
             )
             try:
-                completed = subprocess.run(
+                # argv-only subprocess call after resolving an allowlisted command
+                # name or an explicit executable file path; no shell is involved.
+                completed = subprocess.run(  # nosemgrep
                     command,
                     capture_output=True,
                     check=False,
@@ -346,10 +360,22 @@ def _local_frame_path(source_handle: str) -> Path:
     return Path(source_handle)
 
 
-def _resolve_executable(executable: str) -> str | None:
-    if "/" in executable:
-        return executable if Path(executable).exists() else None
+def _resolve_executable(
+    executable: str,
+    *,
+    allowed_command_names: frozenset[str],
+) -> str | None:
+    path = Path(executable)
+    has_path_component = path.parent != Path(".")
+    if path.name not in allowed_command_names and not has_path_component:
+        return None
+    if has_path_component:
+        return str(path) if path.is_file() and _is_executable(path) else None
     return shutil.which(executable)
+
+
+def _is_executable(path: Path) -> bool:
+    return path.exists() and path.is_file() and os.access(path, os.X_OK)
 
 
 def _solve_field_command(
