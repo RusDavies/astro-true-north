@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--wt901-overwrite",
         action="store_true",
-        help="with --stream-wt901, update one terminal row instead of scrolling",
+        help="with --stream-wt901, update a four-row terminal dashboard instead of scrolling",
     )
     parser.add_argument(
         "--wt901-baud",
@@ -199,13 +199,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if port is None:
             return 1
-        print(format_wt901_stream_header(), flush=True)
         lines_seen = 0
         overwrite_rows = ("accel", "gyro", "angle", "mag")
         latest_rows = {channel: f"{channel}: waiting for frame" for channel in overwrite_rows}
         if args.wt901_overwrite:
             for channel in overwrite_rows:
                 print(latest_rows[channel], flush=True)
+        else:
+            print(format_wt901_stream_header(), flush=True)
         try:
             for line in stream_wt901_channel_lines(
                 port,
