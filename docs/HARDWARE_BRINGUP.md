@@ -19,6 +19,9 @@ The first confirmed adapter path was `/dev/ttyUSB0`, exposed as
 `/dev/serial/by-id/usb-1a86_USB_UART-LPT-if00-port0`. The first working baud
 rate was `9600`.
 
+Two identical CH341 USB-UART adapters can enumerate in either order. Probe both
+`/dev/ttyUSB0` and `/dev/ttyUSB1` if the expected sensor produces no frames.
+
 Do not use the RS485/RS422 adapter for this TTL UART wiring.
 
 ## BN-220 GPS Wiring
@@ -126,3 +129,26 @@ including 20 RMC sentences and 20 GGA sentences, but no fix:
 A 60-second follow-up produced the same no-fix status. A short no-fix NMEA
 fixture is stored in `tests/fixtures/bn220_no_fix_nmea.txt`. A fixed outdoor or
 window-sky capture remains a hardware follow-up.
+
+## Mounted WT901 Error-Budget Capture
+
+On 2026-07-17, the WT901 was mounted on the telescope and sampled for a
+15-second stationary calibration capture at 9600 baud. The active WT901 adapter
+was `/dev/ttyUSB1`; `/dev/ttyUSB0` opened but produced zero WT901 frames.
+
+Capture summary:
+
+- Status: stationary-estimate.
+- Samples: 301.
+- Angle frames: 151.
+- Magnetometer frames: 150.
+- Stationary jitter: roll 0.012 degrees, pitch 0.004 degrees, yaw 0.041
+  degrees.
+- Observed spans: roll 0.07 degrees, pitch 0.02 degrees, yaw 0.38 degrees.
+- Magnetometer magnitude variation: 5.4%.
+- Recommended compass uncertainty: 2.0 degrees.
+- Recommended inclinometer uncertainty: 0.5 degrees.
+
+This keeps the provisional compass uncertainty at 2.0 degrees for stationary
+mounted use. The next field check is a slow mounted yaw sweep near the telescope
+hardware to look for heading discontinuities and local magnetic distortion.
