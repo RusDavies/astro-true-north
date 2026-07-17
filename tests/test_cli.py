@@ -158,9 +158,13 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         output = stdout.getvalue()
+        self.assertNotIn("elapsed_s,channel", output)
         self.assertIn("accel: waiting for frame", output)
         self.assertIn("mag: waiting for frame", output)
         self.assertIn("\x1b[4F", output)
+        self.assertIn("0.000000,accel", output)
+        self.assertIn("0.100000,gyro", output)
+        self.assertIn("0.200000,angle", output)
         self.assertIn("0.300000,mag", output)
 
     def test_wt901_calibration_output(self) -> None:
