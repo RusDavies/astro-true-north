@@ -129,6 +129,29 @@ class CliTests(unittest.TestCase):
         self.assertIn("elapsed_s,channel", output)
         self.assertIn("angle", output)
 
+    def test_wt901_stream_overwrite_output(self) -> None:
+        stdout = io.StringIO()
+
+        with (
+            mock.patch(
+                "astro_true_north.cli.stream_wt901_channel_lines",
+                return_value=iter(["0.000000,angle,,,,,,,0.0,0.0,1.0,,,,"]),
+            ),
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(
+                [
+                    "--stream-wt901",
+                    "/dev/ttyUSB1",
+                    "--wt901-duration",
+                    "0.5",
+                    "--wt901-overwrite",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertIn("\r\x1b[K0.000000,angle", stdout.getvalue())
+
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(
             samples_seen=4,

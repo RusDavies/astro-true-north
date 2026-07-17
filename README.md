@@ -94,6 +94,15 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 10
 ```
 
+For a non-scrolling terminal view, add `--wt901-overwrite`:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --stream-wt901 auto \
+  --wt901-duration 10 \
+  --wt901-overwrite
+```
+
 Sample a live BN-220 GPS over USB UART with:
 
 ```bash

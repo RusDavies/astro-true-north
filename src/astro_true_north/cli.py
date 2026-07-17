@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="stream decoded WT901 channel rows as CSV; use 'auto' to probe",
     )
     parser.add_argument(
+        "--wt901-overwrite",
+        action="store_true",
+        help="with --stream-wt901, update one terminal row instead of scrolling",
+    )
+    parser.add_argument(
         "--wt901-baud",
         type=int,
         default=9600,
@@ -202,11 +207,16 @@ def main(argv: list[str] | None = None) -> int:
                 baud=args.wt901_baud,
                 duration_seconds=args.wt901_duration,
             ):
-                print(line, flush=True)
+                if args.wt901_overwrite:
+                    print(f"\r\x1b[K{line}", end="", flush=True)
+                else:
+                    print(line, flush=True)
                 lines_seen += 1
         except BrokenPipeError:
             sys.stdout = open(os.devnull, "w")
             return 0
+        if args.wt901_overwrite and lines_seen:
+            print()
         return 0 if lines_seen else 1
     if args.calibrate_wt901:
         port = resolve_cli_port(
