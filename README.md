@@ -86,6 +86,14 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 20
 ```
 
+Stream decoded WT901 channel rows for live inspection:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --stream-wt901 auto \
+  --wt901-duration 10
+```
+
 Sample a live BN-220 GPS over USB UART with:
 
 ```bash

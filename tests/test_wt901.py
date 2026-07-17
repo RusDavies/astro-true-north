@@ -5,11 +5,15 @@ import struct
 import unittest
 
 from astro_true_north.wt901 import (
+    ACCELERATION_FRAME,
     ANGLE_FRAME,
+    GYRO_FRAME,
     MAGNETIC_FRAME,
     circular_span_deg,
     decode_wt901_frame,
     estimate_wt901_error_budget,
+    format_wt901_stream_header,
+    format_wt901_stream_sample,
     iter_wt901_samples,
     summarize_wt901_samples,
 )
@@ -21,6 +25,32 @@ def wt901_frame(kind: int, values: tuple[int, int, int, int]) -> bytes:
 
 
 class Wt901Tests(unittest.TestCase):
+    def test_decode_acceleration_frame(self) -> None:
+        frame = wt901_frame(ACCELERATION_FRAME, (2048, -4096, 8192, 0))
+
+        sample = decode_wt901_frame(frame, now=1.5)
+
+        self.assertIsNotNone(sample)
+        assert sample is not None
+        self.assertIsNotNone(sample.acceleration)
+        assert sample.acceleration is not None
+        self.assertAlmostEqual(sample.acceleration.x_g, 1.0)
+        self.assertAlmostEqual(sample.acceleration.y_g, -2.0)
+        self.assertAlmostEqual(sample.acceleration.z_g, 4.0)
+
+    def test_decode_gyro_frame(self) -> None:
+        frame = wt901_frame(GYRO_FRAME, (16384, -8192, 4096, 0))
+
+        sample = decode_wt901_frame(frame, now=1.5)
+
+        self.assertIsNotNone(sample)
+        assert sample is not None
+        self.assertIsNotNone(sample.gyro)
+        assert sample.gyro is not None
+        self.assertAlmostEqual(sample.gyro.x_deg_s, 1000.0)
+        self.assertAlmostEqual(sample.gyro.y_deg_s, -500.0)
+        self.assertAlmostEqual(sample.gyro.z_deg_s, 250.0)
+
     def test_decode_angle_frame(self) -> None:
         frame = wt901_frame(ANGLE_FRAME, (16384, -8192, 4096, 0))
 
@@ -53,6 +83,15 @@ class Wt901Tests(unittest.TestCase):
         frame[-1] ^= 0xFF
 
         self.assertIsNone(decode_wt901_frame(bytes(frame)))
+
+    def test_format_stream_rows(self) -> None:
+        sample = decode_wt901_frame(wt901_frame(ANGLE_FRAME, (0, 0, 8192, 0)), now=12.5)
+
+        self.assertIn("elapsed_s,channel", format_wt901_stream_header())
+        self.assertEqual(
+            format_wt901_stream_sample(sample, start_time_monotonic=10.0),
+            "2.500000,angle,,,,,,,0.000000,0.000000,45.000000,,,,",
+        )
 
     def test_stream_parser_resynchronizes(self) -> None:
         stream = io.BytesIO(

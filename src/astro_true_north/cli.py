@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 
 from astro_true_north import __version__
 from astro_true_north.bn220 import capture_bn220
@@ -15,7 +17,12 @@ from astro_true_north.nexstar import (
 )
 from astro_true_north.pipeline import load_fixture_pipeline, run_alignment_pipeline
 from astro_true_north.serial_discovery import discover_serial_ports, resolve_sensor_port
-from astro_true_north.wt901 import capture_wt901, capture_wt901_calibration
+from astro_true_north.wt901 import (
+    capture_wt901,
+    capture_wt901_calibration,
+    format_wt901_stream_header,
+    stream_wt901_channel_lines,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-wt901",
         metavar="PORT",
         help="sample a WT901 serial device and print a movement summary; use 'auto' to probe",
+    )
+    parser.add_argument(
+        "--stream-wt901",
+        metavar="PORT",
+        help="stream decoded WT901 channel rows as CSV; use 'auto' to probe",
     )
     parser.add_argument(
         "--wt901-baud",
@@ -173,6 +185,29 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("\n".join(summary.report_lines()))
         return 0 if summary.angle_samples else 1
+    if args.stream_wt901:
+        port = resolve_cli_port(
+            args.stream_wt901,
+            target="wt901",
+            baud=args.wt901_baud,
+            duration_seconds=args.serial_probe_duration,
+        )
+        if port is None:
+            return 1
+        print(format_wt901_stream_header(), flush=True)
+        lines_seen = 0
+        try:
+            for line in stream_wt901_channel_lines(
+                port,
+                baud=args.wt901_baud,
+                duration_seconds=args.wt901_duration,
+            ):
+                print(line, flush=True)
+                lines_seen += 1
+        except BrokenPipeError:
+            sys.stdout = open(os.devnull, "w")
+            return 0
+        return 0 if lines_seen else 1
     if args.calibrate_wt901:
         port = resolve_cli_port(
             args.calibrate_wt901,

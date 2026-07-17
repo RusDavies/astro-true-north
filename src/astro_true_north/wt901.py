@@ -21,6 +21,24 @@ MAGNETIC_FRAME = 0x54
 
 
 @dataclass(frozen=True)
+class Wt901Acceleration:
+    """Acceleration in g."""
+
+    x_g: float
+    y_g: float
+    z_g: float
+
+
+@dataclass(frozen=True)
+class Wt901Gyro:
+    """Angular velocity in degrees per second."""
+
+    x_deg_s: float
+    y_deg_s: float
+    z_deg_s: float
+
+
+@dataclass(frozen=True)
 class Wt901Angle:
     """Roll, pitch, and yaw in degrees."""
 
@@ -47,6 +65,8 @@ class Wt901Sample:
     """Decoded WT901 sample values available at one point in the stream."""
 
     timestamp_monotonic: float
+    acceleration: Wt901Acceleration | None = None
+    gyro: Wt901Gyro | None = None
     angle: Wt901Angle | None = None
     magnetic_field: Wt901MagneticField | None = None
 
@@ -228,6 +248,24 @@ def decode_wt901_frame(frame: bytes, now: float | None = None) -> Wt901Sample | 
     kind = frame[1]
     values = struct.unpack("<hhhh", frame[2:10])
     timestamp = time.monotonic() if now is None else now
+    if kind == ACCELERATION_FRAME:
+        return Wt901Sample(
+            timestamp_monotonic=timestamp,
+            acceleration=Wt901Acceleration(
+                x_g=values[0] / 32768 * 16,
+                y_g=values[1] / 32768 * 16,
+                z_g=values[2] / 32768 * 16,
+            ),
+        )
+    if kind == GYRO_FRAME:
+        return Wt901Sample(
+            timestamp_monotonic=timestamp,
+            gyro=Wt901Gyro(
+                x_deg_s=values[0] / 32768 * 2000,
+                y_deg_s=values[1] / 32768 * 2000,
+                z_deg_s=values[2] / 32768 * 2000,
+            ),
+        )
     if kind == ANGLE_FRAME:
         return Wt901Sample(
             timestamp_monotonic=timestamp,
@@ -243,6 +281,80 @@ def decode_wt901_frame(frame: bytes, now: float | None = None) -> Wt901Sample | 
             magnetic_field=Wt901MagneticField(values[0], values[1], values[2]),
         )
     return None
+
+
+def format_wt901_stream_header() -> str:
+    return (
+        "elapsed_s,channel,accel_x_g,accel_y_g,accel_z_g,"
+        "gyro_x_deg_s,gyro_y_deg_s,gyro_z_deg_s,"
+        "roll_deg,pitch_deg,yaw_deg,mag_x,mag_y,mag_z,mag_magnitude"
+    )
+
+
+def format_wt901_stream_sample(
+    sample: Wt901Sample,
+    *,
+    start_time_monotonic: float,
+) -> str:
+    elapsed = sample.timestamp_monotonic - start_time_monotonic
+    fields = [""] * 13
+    channel = "unknown"
+    if sample.acceleration is not None:
+        channel = "accel"
+        fields[0:3] = [
+            f"{sample.acceleration.x_g:.6f}",
+            f"{sample.acceleration.y_g:.6f}",
+            f"{sample.acceleration.z_g:.6f}",
+        ]
+    elif sample.gyro is not None:
+        channel = "gyro"
+        fields[3:6] = [
+            f"{sample.gyro.x_deg_s:.6f}",
+            f"{sample.gyro.y_deg_s:.6f}",
+            f"{sample.gyro.z_deg_s:.6f}",
+        ]
+    elif sample.angle is not None:
+        channel = "angle"
+        fields[6:9] = [
+            f"{sample.angle.roll_deg:.6f}",
+            f"{sample.angle.pitch_deg:.6f}",
+            f"{sample.angle.yaw_deg:.6f}",
+        ]
+    elif sample.magnetic_field is not None:
+        channel = "mag"
+        fields[9:13] = [
+            str(sample.magnetic_field.x),
+            str(sample.magnetic_field.y),
+            str(sample.magnetic_field.z),
+            f"{sample.magnetic_field.magnitude:.6f}",
+        ]
+    return ",".join([f"{elapsed:.6f}", channel, *fields])
+
+
+def stream_wt901_channel_lines(
+    port: str,
+    *,
+    baud: int = 9600,
+    duration_seconds: float = 10.0,
+) -> Iterator[str]:
+    if duration_seconds <= 0:
+        raise ValueError("duration_seconds must be positive")
+
+    with open(port, "rb", buffering=0) as device:
+        configure_serial_port(device, baud)
+        deadline = time.monotonic() + duration_seconds
+        start = time.monotonic()
+        iterator = iter_wt901_samples(device)
+        while time.monotonic() < deadline:
+            for sample in iterator:
+                yield format_wt901_stream_sample(
+                    sample,
+                    start_time_monotonic=start,
+                )
+                if time.monotonic() >= deadline:
+                    break
+            else:
+                break
 
 
 def capture_wt901(
