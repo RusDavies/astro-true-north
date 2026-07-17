@@ -201,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(format_wt901_stream_header(), flush=True)
         lines_seen = 0
+        overwrite_rows = ("accel", "gyro", "angle", "mag")
+        latest_rows = {channel: f"{channel}: waiting for frame" for channel in overwrite_rows}
+        if args.wt901_overwrite:
+            for channel in overwrite_rows:
+                print(latest_rows[channel], flush=True)
         try:
             for line in stream_wt901_channel_lines(
                 port,
@@ -208,7 +213,12 @@ def main(argv: list[str] | None = None) -> int:
                 duration_seconds=args.wt901_duration,
             ):
                 if args.wt901_overwrite:
-                    print(f"\r\x1b[K{line}", end="", flush=True)
+                    channel = wt901_stream_channel(line)
+                    if channel in latest_rows:
+                        latest_rows[channel] = line
+                    print(f"\x1b[{len(overwrite_rows)}F", end="")
+                    for channel in overwrite_rows:
+                        print(f"\x1b[K{latest_rows[channel]}", flush=True)
                 else:
                     print(line, flush=True)
                 lines_seen += 1
@@ -321,6 +331,13 @@ def resolve_cli_port(
         return None
     print(f"Using {resolved}.")
     return resolved
+
+
+def wt901_stream_channel(line: str) -> str:
+    parts = line.split(",", maxsplit=2)
+    if len(parts) < 2:
+        return ""
+    return parts[1]
 
 
 if __name__ == "__main__":

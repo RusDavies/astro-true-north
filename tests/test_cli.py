@@ -135,7 +135,14 @@ class CliTests(unittest.TestCase):
         with (
             mock.patch(
                 "astro_true_north.cli.stream_wt901_channel_lines",
-                return_value=iter(["0.000000,angle,,,,,,,0.0,0.0,1.0,,,,"]),
+                return_value=iter(
+                    [
+                        "0.000000,accel,1.0,2.0,3.0,,,,,,,,,,",
+                        "0.100000,gyro,,,,4.0,5.0,6.0,,,,,,,",
+                        "0.200000,angle,,,,,,,7.0,8.0,9.0,,,,",
+                        "0.300000,mag,,,,,,,,,,10,11,12,19.104973",
+                    ]
+                ),
             ),
             contextlib.redirect_stdout(stdout),
         ):
@@ -150,7 +157,11 @@ class CliTests(unittest.TestCase):
             )
 
         self.assertEqual(result, 0)
-        self.assertIn("\r\x1b[K0.000000,angle", stdout.getvalue())
+        output = stdout.getvalue()
+        self.assertIn("accel: waiting for frame", output)
+        self.assertIn("mag: waiting for frame", output)
+        self.assertIn("\x1b[4F", output)
+        self.assertIn("0.300000,mag", output)
 
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(

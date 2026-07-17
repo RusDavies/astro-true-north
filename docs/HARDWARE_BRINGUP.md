@@ -91,7 +91,7 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 10
 ```
 
-To update one terminal row instead of scrolling:
+To update a four-channel terminal dashboard instead of scrolling:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
