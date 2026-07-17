@@ -135,8 +135,25 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --mount-abort-ready
 ```
 
-The current CLI still emits no motor commands. The approval and abort flags
-exist to keep the safety boundary explicit before movement support is added.
+Without `--execute-nexstar-slow-yaw`, the CLI only validates the plan. The
+approval and abort flags keep the movement boundary explicit.
+
+To execute the guarded slow-yaw plan:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --plan-nexstar-slow-yaw right \
+  --execute-nexstar-slow-yaw /dev/ttyUSB2 \
+  --nexstar-yaw-rate-deg-sec 0.2 \
+  --nexstar-yaw-duration 10 \
+  --approve-mount-motion \
+  --mount-abort-ready
+```
+
+Execution sends a variable-rate azimuth slew command and then sends both
+positive and negative azimuth fixed-rate stop commands during cleanup. Keep the
+hand controller and power switch within reach before running this against real
+hardware.
 
 ## First Live Capture
 

@@ -9,6 +9,7 @@ from astro_true_north.bn220 import capture_bn220
 from astro_true_north.nexstar import (
     MountMotionLockedError,
     NexStarProtocolError,
+    execute_slow_yaw,
     query_nexstar_status,
     validate_slow_yaw_plan,
 )
@@ -98,6 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("left", "right"),
         metavar="DIRECTION",
         help="validate a guarded NexStar slow-yaw plan without sending motor commands",
+    )
+    parser.add_argument(
+        "--execute-nexstar-slow-yaw",
+        metavar="PORT",
+        help="execute a guarded NexStar slow-yaw plan after all approval gates pass",
     )
     parser.add_argument(
         "--nexstar-yaw-rate-deg-sec",
@@ -224,8 +230,23 @@ def main(argv: list[str] | None = None) -> int:
         except MountMotionLockedError as exc:
             print(f"NexStar slow-yaw plan locked: {exc}")
             return 1
+        if args.execute_nexstar_slow_yaw:
+            try:
+                lines = execute_slow_yaw(
+                    args.execute_nexstar_slow_yaw,
+                    plan,
+                    baud=args.nexstar_baud,
+                )
+            except (MountMotionLockedError, NexStarProtocolError, OSError) as exc:
+                print(f"NexStar slow-yaw execution failed: {exc}")
+                return 1
+            print("\n".join(lines))
+            return 0
         print("\n".join(plan.report_lines()))
         return 0
+    if args.execute_nexstar_slow_yaw:
+        print("--execute-nexstar-slow-yaw requires --plan-nexstar-slow-yaw")
+        return 1
 
     parser.print_help()
     return 0

@@ -254,7 +254,45 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         output = stdout.getvalue()
         self.assertIn("NexStar slow-yaw plan validated", output)
-        self.assertIn("Motor command emission: disabled", output)
+        self.assertIn("Motor command emission: requires explicit execution", output)
+
+    def test_nexstar_slow_yaw_execute_requires_plan(self) -> None:
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            result = main(["--execute-nexstar-slow-yaw", "/dev/ttyUSB2"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("requires --plan-nexstar-slow-yaw", stdout.getvalue())
+
+    def test_nexstar_slow_yaw_execute_output(self) -> None:
+        stdout = io.StringIO()
+
+        with (
+            mock.patch(
+                "astro_true_north.cli.execute_slow_yaw",
+                return_value=["NexStar slow-yaw command executed."],
+            ) as execute,
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(
+                [
+                    "--plan-nexstar-slow-yaw",
+                    "right",
+                    "--execute-nexstar-slow-yaw",
+                    "/dev/ttyUSB2",
+                    "--nexstar-yaw-rate-deg-sec",
+                    "0.2",
+                    "--nexstar-yaw-duration",
+                    "10",
+                    "--approve-mount-motion",
+                    "--mount-abort-ready",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        execute.assert_called_once()
+        self.assertIn("executed", stdout.getvalue())
 
 
 if __name__ == "__main__":

@@ -126,4 +126,18 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --mount-abort-ready
 ```
 
-The current prototype deliberately does not emit NexStar motor commands.
+Execute that guarded slow-yaw plan:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --plan-nexstar-slow-yaw right \
+  --execute-nexstar-slow-yaw /dev/ttyUSB2 \
+  --nexstar-yaw-rate-deg-sec 0.2 \
+  --nexstar-yaw-duration 10 \
+  --approve-mount-motion \
+  --mount-abort-ready
+```
+
+Execution sends a variable-rate azimuth command and then sends azimuth stop
+commands in a cleanup path. Keep a physical stop/abort path ready before using
+it on real hardware.

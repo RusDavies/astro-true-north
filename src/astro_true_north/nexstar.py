@@ -7,7 +7,7 @@ import select
 import termios
 import time
 from dataclasses import dataclass
-from typing import BinaryIO
+from typing import Callable
 
 
 NEXSTAR_MODEL_NAMES: dict[int, str] = {
@@ -32,6 +32,11 @@ NEXSTAR_MODEL_NAMES: dict[int, str] = {
 
 MAX_SLOW_YAW_RATE_DEG_PER_SEC = 0.5
 MAX_SLOW_YAW_DURATION_SECONDS = 120.0
+AZM_RA_AXIS = 16
+POSITIVE_RATE_COMMAND = 6
+NEGATIVE_RATE_COMMAND = 7
+POSITIVE_FIXED_COMMAND = 36
+NEGATIVE_FIXED_COMMAND = 37
 
 
 class NexStarProtocolError(RuntimeError):
@@ -87,7 +92,7 @@ class SlowYawPlan:
             f"Rate: {self.rate_deg_per_sec:.3f} deg/s",
             f"Duration: {self.duration_seconds:.1f} s",
             f"Sweep: {self.sweep_degrees:.3f} deg",
-            "Motor command emission: disabled in this prototype step.",
+            "Motor command emission: requires explicit execution command.",
         ]
 
 
@@ -99,36 +104,7 @@ def query_nexstar_status(
 ) -> NexStarStatus:
     """Read basic NexStar hand-controller status without issuing movement commands."""
     with NexStarSerial(port, baud=baud, timeout_seconds=timeout_seconds) as serial:
-        echo = serial.transact(b"Kx")
-        if echo != b"x":
-            raise NexStarProtocolError(f"unexpected NexStar echo response: {echo!r}")
-
-        version = serial.transact(b"V")
-        if len(version) != 2:
-            raise NexStarProtocolError(f"unexpected NexStar version response: {version!r}")
-
-        model = serial.transact(b"m")
-        if len(model) != 1:
-            raise NexStarProtocolError(f"unexpected NexStar model response: {model!r}")
-
-        alignment = serial.transact(b"J")
-        goto = serial.transact(b"L")
-        tracking = serial.transact(b"t")
-        az_alt = serial.transact(b"Z")
-
-    model_code = model[0]
-    return NexStarStatus(
-        port=port,
-        version_major=version[0],
-        version_minor=version[1],
-        model_code=model_code,
-        model_name=NEXSTAR_MODEL_NAMES.get(model_code, "Unknown"),
-        alignment_complete=parse_flag_response(alignment),
-        goto_in_progress=parse_ascii_digit_flag(goto),
-        tracking_mode=parse_single_byte_value(tracking),
-        azimuth_deg=parse_nexstar_angle_pair(az_alt)[0],
-        altitude_deg=parse_nexstar_angle_pair(az_alt)[1],
-    )
+        return query_nexstar_status_with_transport(port, serial)
 
 
 def validate_slow_yaw_plan(
@@ -165,6 +141,144 @@ def validate_slow_yaw_plan(
         operator_approved=operator_approved,
         abort_ready=abort_ready,
     )
+
+
+def execute_slow_yaw(
+    port: str,
+    plan: SlowYawPlan,
+    *,
+    baud: int = 9600,
+    timeout_seconds: float = 2.0,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[str]:
+    """Execute a guarded azimuth slow-yaw plan and always send stop commands."""
+    with NexStarSerial(port, baud=baud, timeout_seconds=timeout_seconds) as serial:
+        status = query_nexstar_status_with_transport(port, serial)
+        if status.goto_in_progress:
+            raise MountMotionLockedError("cannot yaw while a GOTO is in progress")
+
+        start = build_variable_rate_azimuth_command(
+            direction=plan.direction,
+            rate_deg_per_sec=plan.rate_deg_per_sec,
+        )
+        stop_commands = build_azimuth_stop_commands()
+        serial.transact(start)
+        try:
+            sleeper(plan.duration_seconds)
+        finally:
+            send_stop_commands(serial, stop_commands)
+
+    return [
+        "NexStar slow-yaw command executed.",
+        f"Direction: {plan.direction}",
+        f"Rate: {plan.rate_deg_per_sec:.3f} deg/s",
+        f"Duration: {plan.duration_seconds:.1f} s",
+        f"Stop commands sent: {len(build_azimuth_stop_commands())}",
+    ]
+
+
+def send_stop_commands(
+    serial: "NexStarSerial",
+    stop_commands: tuple[bytes, ...] | None = None,
+) -> None:
+    errors: list[Exception] = []
+    for command in stop_commands or build_azimuth_stop_commands():
+        try:
+            serial.transact(command)
+        except Exception as exc:  # pragma: no cover - preserving all stop attempts matters.
+            errors.append(exc)
+    if errors:
+        raise NexStarProtocolError(f"{len(errors)} stop command(s) failed")
+
+
+def query_nexstar_status_with_transport(
+    port: str,
+    serial: "NexStarSerial",
+) -> NexStarStatus:
+    echo = serial.transact(b"Kx")
+    if echo != b"x":
+        raise NexStarProtocolError(f"unexpected NexStar echo response: {echo!r}")
+
+    version = serial.transact(b"V")
+    if len(version) != 2:
+        raise NexStarProtocolError(f"unexpected NexStar version response: {version!r}")
+
+    model = serial.transact(b"m")
+    if len(model) != 1:
+        raise NexStarProtocolError(f"unexpected NexStar model response: {model!r}")
+
+    alignment = serial.transact(b"J")
+    goto = serial.transact(b"L")
+    tracking = serial.transact(b"t")
+    az_alt = serial.transact(b"Z")
+
+    model_code = model[0]
+    return NexStarStatus(
+        port=port,
+        version_major=version[0],
+        version_minor=version[1],
+        model_code=model_code,
+        model_name=NEXSTAR_MODEL_NAMES.get(model_code, "Unknown"),
+        alignment_complete=parse_flag_response(alignment),
+        goto_in_progress=parse_ascii_digit_flag(goto),
+        tracking_mode=parse_single_byte_value(tracking),
+        azimuth_deg=parse_nexstar_angle_pair(az_alt)[0],
+        altitude_deg=parse_nexstar_angle_pair(az_alt)[1],
+    )
+
+
+def build_variable_rate_azimuth_command(
+    *,
+    direction: str,
+    rate_deg_per_sec: float,
+) -> bytes:
+    normalized_direction = direction.lower()
+    if normalized_direction == "right":
+        command = POSITIVE_RATE_COMMAND
+    elif normalized_direction == "left":
+        command = NEGATIVE_RATE_COMMAND
+    else:
+        raise MountMotionLockedError("direction must be 'left' or 'right'")
+    if rate_deg_per_sec <= 0:
+        raise MountMotionLockedError("yaw rate must be greater than zero")
+    if rate_deg_per_sec > MAX_SLOW_YAW_RATE_DEG_PER_SEC:
+        raise MountMotionLockedError(
+            f"yaw rate exceeds {MAX_SLOW_YAW_RATE_DEG_PER_SEC:.2f} deg/s limit"
+        )
+    rate_units = round(rate_deg_per_sec * 3600.0 * 4.0)
+    if rate_units > 0xFFFF:
+        raise MountMotionLockedError("yaw rate exceeds NexStar variable-rate range")
+    return bytes(
+        [
+            ord("P"),
+            3,
+            AZM_RA_AXIS,
+            command,
+            (rate_units >> 8) & 0xFF,
+            rate_units & 0xFF,
+            0,
+            0,
+        ]
+    )
+
+
+def build_azimuth_stop_commands() -> tuple[bytes, bytes]:
+    return (
+        build_fixed_rate_azimuth_command(direction="right", rate=0),
+        build_fixed_rate_azimuth_command(direction="left", rate=0),
+    )
+
+
+def build_fixed_rate_azimuth_command(*, direction: str, rate: int) -> bytes:
+    if direction == "right":
+        command = POSITIVE_FIXED_COMMAND
+    elif direction == "left":
+        command = NEGATIVE_FIXED_COMMAND
+    else:
+        raise MountMotionLockedError("direction must be 'left' or 'right'")
+    if not 0 <= rate <= 9:
+        raise MountMotionLockedError("fixed slew rate must be between 0 and 9")
+    return bytes([ord("P"), 2, AZM_RA_AXIS, command, rate, 0, 0, 0])
 
 
 class NexStarSerial:
