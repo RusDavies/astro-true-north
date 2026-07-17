@@ -21,6 +21,8 @@ rate was `9600`.
 
 Two identical CH341 USB-UART adapters can enumerate in either order. Probe both
 `/dev/ttyUSB0` and `/dev/ttyUSB1` if the expected sensor produces no frames.
+For normal CLI use, pass `auto` and let the runtime probe identify the active
+sensor stream.
 
 Do not use the RS485/RS422 adapter for this TTL UART wiring.
 
@@ -76,7 +78,7 @@ The project CLI can read and summarize a short live WT901 capture:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --sample-wt901 /dev/ttyUSB0 \
+  --sample-wt901 auto \
   --wt901-duration 20
 ```
 
@@ -84,7 +86,7 @@ It can also read and summarize a short live BN-220 GPS capture:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --sample-bn220 /dev/ttyUSB1 \
+  --sample-bn220 auto \
   --gps-duration 20
 ```
 
@@ -94,8 +96,14 @@ The first stationary WT901 error-budget capture uses:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --calibrate-wt901 /dev/ttyUSB0 \
+  --calibrate-wt901 auto \
   --wt901-duration 15
+```
+
+Inspect detected sensor streams directly with:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli --discover-serial
 ```
 
 If the device is not readable, add the operator user to the serial device group

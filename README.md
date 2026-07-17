@@ -82,7 +82,7 @@ Sample a live WT901 over USB UART with:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --sample-wt901 /dev/ttyUSB0 \
+  --sample-wt901 auto \
   --wt901-duration 20
 ```
 
@@ -90,7 +90,7 @@ Sample a live BN-220 GPS over USB UART with:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --sample-bn220 /dev/ttyUSB1 \
+  --sample-bn220 auto \
   --gps-duration 20
 ```
 
@@ -98,6 +98,12 @@ Run the first WT901 stationary error-budget capture with:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \
-  --calibrate-wt901 /dev/ttyUSB0 \
+  --calibrate-wt901 auto \
   --wt901-duration 15
+```
+
+When multiple serial adapters are attached, inspect the detected streams with:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli --discover-serial
 ```
