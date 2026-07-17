@@ -118,6 +118,22 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 15
 ```
 
+After capturing a controlled large-arc WT901 CSV, fit relative yaw from the raw
+3-axis magnetometer vector with:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --fit-wt901-mag-yaw /tmp/wt901-sweep.csv \
+  --mag-yaw-start-deg -30 \
+  --mag-yaw-end-deg 30
+```
+
+If the CSV starts before the measured sweep or continues after it, add
+`--mag-yaw-start-elapsed-s` and `--mag-yaw-end-elapsed-s` so the fit window
+matches only the known motion. This estimates relative yaw over the calibration
+arc; true-north pointing still requires location-aware magnetic correction and
+plate-solving refinement.
+
 Inspect detected sensor streams directly with:
 
 ```bash

@@ -190,6 +190,69 @@ class Wt901CalibrationReport:
         return lines
 
 
+@dataclass(frozen=True)
+class Wt901MagnetometerYawPoint:
+    """One known relative-yaw point with a corresponding raw magnetic vector."""
+
+    relative_yaw_deg: float
+    magnetic_field: Wt901MagneticField
+
+
+@dataclass(frozen=True)
+class Wt901MagnetometerYawFit:
+    """Linear relative-yaw fit from raw 3-axis magnetometer vectors."""
+
+    status: str
+    samples: int
+    relative_yaw_start_deg: float | None
+    relative_yaw_end_deg: float | None
+    coefficients: tuple[float, float, float]
+    intercept: float
+    rmse_deg: float | None
+    mae_deg: float | None
+    max_error_deg: float | None
+    r_squared: float | None
+
+    def estimate_relative_yaw_deg(self, magnetic_field: Wt901MagneticField) -> float:
+        return (
+            self.intercept
+            + self.coefficients[0] * magnetic_field.x
+            + self.coefficients[1] * magnetic_field.y
+            + self.coefficients[2] * magnetic_field.z
+        )
+
+    def report_lines(self) -> list[str]:
+        lines = [
+            "WT901 magnetometer relative-yaw fit",
+            f"Status: {self.status}",
+            f"Samples: {self.samples}",
+        ]
+        if self.relative_yaw_start_deg is not None and self.relative_yaw_end_deg is not None:
+            lines.append(
+                "Relative yaw range: "
+                f"{self.relative_yaw_start_deg:.3f} to {self.relative_yaw_end_deg:.3f} deg"
+            )
+        if self.rmse_deg is not None:
+            lines.extend(
+                [
+                    f"RMSE: {self.rmse_deg:.3f} deg",
+                    f"MAE: {self.mae_deg:.3f} deg",
+                    f"Max error: {self.max_error_deg:.3f} deg",
+                    f"R^2: {self.r_squared:.4f}" if self.r_squared is not None else "R^2: n/a",
+                    (
+                        "Fit: relative_yaw_deg = "
+                        f"{self.intercept:.9f} "
+                        f"+ {self.coefficients[0]:.9f}*mag_x "
+                        f"+ {self.coefficients[1]:.9f}*mag_y "
+                        f"+ {self.coefficients[2]:.9f}*mag_z"
+                    ),
+                ]
+            )
+        else:
+            lines.append("Insufficient magnetometer variation for a fit.")
+        return lines
+
+
 def format_range(low: float | None, high: float | None) -> str:
     if low is None or high is None:
         return "n/a"
@@ -517,6 +580,133 @@ def percent_span(values: list[float]) -> float | None:
     if mean == 0:
         return None
     return (span(values) or 0.0) / mean * 100
+
+
+def fit_magnetometer_relative_yaw(
+    points: list[Wt901MagnetometerYawPoint],
+) -> Wt901MagnetometerYawFit:
+    if len(points) < 4:
+        return Wt901MagnetometerYawFit(
+            status="insufficient-data",
+            samples=len(points),
+            relative_yaw_start_deg=None,
+            relative_yaw_end_deg=None,
+            coefficients=(0.0, 0.0, 0.0),
+            intercept=0.0,
+            rmse_deg=None,
+            mae_deg=None,
+            max_error_deg=None,
+            r_squared=None,
+        )
+
+    targets = [point.relative_yaw_deg for point in points]
+    vectors = [
+        (
+            float(point.magnetic_field.x),
+            float(point.magnetic_field.y),
+            float(point.magnetic_field.z),
+        )
+        for point in points
+    ]
+    target_mean = sum(targets) / len(targets)
+    vector_means = tuple(sum(vector[index] for vector in vectors) / len(vectors) for index in range(3))
+
+    centered_vectors = [
+        tuple(vector[index] - vector_means[index] for index in range(3))
+        for vector in vectors
+    ]
+    centered_targets = [target - target_mean for target in targets]
+
+    principal_component = first_principal_component(centered_vectors)
+    if principal_component is None:
+        return Wt901MagnetometerYawFit(
+            status="singular-fit",
+            samples=len(points),
+            relative_yaw_start_deg=min(targets),
+            relative_yaw_end_deg=max(targets),
+            coefficients=(0.0, 0.0, 0.0),
+            intercept=target_mean,
+            rmse_deg=None,
+            mae_deg=None,
+            max_error_deg=None,
+            r_squared=None,
+        )
+
+    projections = [
+        sum(vector[index] * principal_component[index] for index in range(3))
+        for vector in centered_vectors
+    ]
+    projection_variance = sum(projection * projection for projection in projections)
+    if projection_variance == 0:
+        return Wt901MagnetometerYawFit(
+            status="singular-fit",
+            samples=len(points),
+            relative_yaw_start_deg=min(targets),
+            relative_yaw_end_deg=max(targets),
+            coefficients=(0.0, 0.0, 0.0),
+            intercept=target_mean,
+            rmse_deg=None,
+            mae_deg=None,
+            max_error_deg=None,
+            r_squared=None,
+        )
+
+    slope = sum(
+        projection * target
+        for projection, target in zip(projections, centered_targets)
+    ) / projection_variance
+    coefficients = tuple(slope * value for value in principal_component)
+    intercept = target_mean - sum(coefficients[index] * vector_means[index] for index in range(3))
+    estimates = [
+        intercept + sum(coefficients[index] * vector[index] for index in range(3))
+        for vector in vectors
+    ]
+    errors = [estimate - target for estimate, target in zip(estimates, targets)]
+    rmse = math.sqrt(sum(error * error for error in errors) / len(errors))
+    mae = sum(abs(error) for error in errors) / len(errors)
+    max_error = max(abs(error) for error in errors)
+    total_variance = sum((target - target_mean) ** 2 for target in targets)
+    residual_variance = sum(error * error for error in errors)
+    r_squared = None if total_variance == 0 else 1 - (residual_variance / total_variance)
+
+    return Wt901MagnetometerYawFit(
+        status="fit",
+        samples=len(points),
+        relative_yaw_start_deg=min(targets),
+        relative_yaw_end_deg=max(targets),
+        coefficients=(coefficients[0], coefficients[1], coefficients[2]),
+        intercept=intercept,
+        rmse_deg=rmse,
+        mae_deg=mae,
+        max_error_deg=max_error,
+        r_squared=r_squared,
+    )
+
+
+def first_principal_component(
+    centered_vectors: list[tuple[float, float, float]],
+    *,
+    iterations: int = 32,
+    epsilon: float = 1e-12,
+) -> tuple[float, float, float] | None:
+    covariance = [
+        [
+            sum(vector[row] * vector[col] for vector in centered_vectors)
+            for col in range(3)
+        ]
+        for row in range(3)
+    ]
+    vector = (1.0, 1.0, 1.0)
+    for _ in range(iterations):
+        next_vector = tuple(
+            sum(covariance[row][col] * vector[col] for col in range(3))
+            for row in range(3)
+        )
+        norm = math.sqrt(sum(value * value for value in next_vector))
+        if norm < epsilon:
+            return None
+        vector = tuple(value / norm for value in next_vector)
+    return vector
 
 
 def circular_span_deg(values: list[float]) -> float | None:

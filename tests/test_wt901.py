@@ -12,10 +12,13 @@ from astro_true_north.wt901 import (
     circular_span_deg,
     decode_wt901_frame,
     estimate_wt901_error_budget,
+    fit_magnetometer_relative_yaw,
     format_wt901_stream_header,
     format_wt901_stream_sample,
     iter_wt901_samples,
     summarize_wt901_samples,
+    Wt901MagneticField,
+    Wt901MagnetometerYawPoint,
 )
 
 
@@ -154,6 +157,35 @@ class Wt901Tests(unittest.TestCase):
         report = estimate_wt901_error_budget([sample for sample in samples if sample])
 
         self.assertEqual(report.status, "moving-during-capture")
+
+    def test_magnetometer_relative_yaw_fit_estimates_sweep_position(self) -> None:
+        points = [
+            Wt901MagnetometerYawPoint(
+                relative_yaw_deg=float(relative_yaw),
+                magnetic_field=Wt901MagneticField(
+                    x=1000 + relative_yaw * 20,
+                    y=-400 + relative_yaw * 9,
+                    z=700 - relative_yaw * 3,
+                ),
+            )
+            for relative_yaw in range(-30, 31, 5)
+        ]
+
+        fit = fit_magnetometer_relative_yaw(points)
+
+        self.assertEqual(fit.status, "fit")
+        self.assertLess(fit.rmse_deg or 99.0, 0.001)
+        estimate = fit.estimate_relative_yaw_deg(
+            Wt901MagneticField(x=1000 + 12 * 20, y=-400 + 12 * 9, z=700 - 12 * 3)
+        )
+        self.assertAlmostEqual(estimate, 12.0, places=3)
+        self.assertIn("WT901 magnetometer relative-yaw fit", "\n".join(fit.report_lines()))
+
+    def test_magnetometer_relative_yaw_fit_requires_enough_points(self) -> None:
+        fit = fit_magnetometer_relative_yaw([])
+
+        self.assertEqual(fit.status, "insufficient-data")
+        self.assertIsNone(fit.rmse_deg)
 
 
 if __name__ == "__main__":
