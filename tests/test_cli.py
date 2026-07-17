@@ -111,6 +111,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(capture.call_args.args[0], "/dev/ttyUSB1")
         self.assertIn("Using /dev/ttyUSB1.", stdout.getvalue())
 
+    def test_wt901_stream_output(self) -> None:
+        stdout = io.StringIO()
+
+        with (
+            mock.patch(
+                "astro_true_north.cli.stream_wt901_channel_lines",
+                return_value=iter(["0.000000,angle,,,,,,,0.0,0.0,1.0,,,,"]),
+            ) as stream,
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(["--stream-wt901", "/dev/ttyUSB1", "--wt901-duration", "0.5"])
+
+        self.assertEqual(result, 0)
+        stream.assert_called_once()
+        output = stdout.getvalue()
+        self.assertIn("elapsed_s,channel", output)
+        self.assertIn("angle", output)
+
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(
             samples_seen=4,

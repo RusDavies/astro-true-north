@@ -82,6 +82,15 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 20
 ```
 
+For live channel inspection, stream decoded acceleration, gyro, angle, and
+magnetometer rows as CSV:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --stream-wt901 auto \
+  --wt901-duration 10
+```
+
 It can also read and summarize a short live BN-220 GPS capture:
 
 ```bash
