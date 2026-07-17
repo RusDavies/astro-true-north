@@ -76,6 +76,40 @@ class CliTests(unittest.TestCase):
         capture.assert_called_once()
         self.assertIn("WT901 sample summary", stdout.getvalue())
 
+    def test_wt901_auto_port_resolution(self) -> None:
+        summary = Wt901CaptureSummary(
+            samples_seen=1,
+            angle_samples=1,
+            magnetic_samples=0,
+            first_angle=Wt901Angle(roll_deg=1.0, pitch_deg=2.0, yaw_deg=3.0),
+            last_angle=Wt901Angle(roll_deg=1.0, pitch_deg=2.0, yaw_deg=3.0),
+            min_yaw_deg=3.0,
+            max_yaw_deg=3.0,
+            min_pitch_deg=2.0,
+            max_pitch_deg=2.0,
+            min_roll_deg=1.0,
+            max_roll_deg=1.0,
+            min_magnetic_magnitude=None,
+            max_magnetic_magnitude=None,
+        )
+        stdout = io.StringIO()
+
+        with (
+            mock.patch(
+                "astro_true_north.cli.resolve_sensor_port",
+                return_value=("/dev/ttyUSB1", []),
+            ) as resolve,
+            mock.patch("astro_true_north.cli.capture_wt901", return_value=summary) as capture,
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(["--sample-wt901", "auto", "--serial-probe-duration", "0.1"])
+
+        self.assertEqual(result, 0)
+        resolve.assert_called_once()
+        capture.assert_called_once()
+        self.assertEqual(capture.call_args.args[0], "/dev/ttyUSB1")
+        self.assertIn("Using /dev/ttyUSB1.", stdout.getvalue())
+
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(
             samples_seen=4,

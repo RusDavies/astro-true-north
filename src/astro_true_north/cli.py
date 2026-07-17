@@ -7,6 +7,7 @@ import argparse
 from astro_true_north import __version__
 from astro_true_north.bn220 import capture_bn220
 from astro_true_north.pipeline import load_fixture_pipeline, run_alignment_pipeline
+from astro_true_north.serial_discovery import discover_serial_ports, resolve_sensor_port
 from astro_true_north.wt901 import capture_wt901, capture_wt901_calibration
 
 
@@ -28,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sample-wt901",
         metavar="PORT",
-        help="sample a WT901 serial device and print a movement summary",
+        help="sample a WT901 serial device and print a movement summary; use 'auto' to probe",
     )
     parser.add_argument(
         "--wt901-baud",
@@ -45,12 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--calibrate-wt901",
         metavar="PORT",
-        help="capture a stationary WT901 sample and estimate first error budgets",
+        help="capture a stationary WT901 sample and estimate first error budgets; use 'auto' to probe",
     )
     parser.add_argument(
         "--sample-bn220",
         metavar="PORT",
-        help="sample a BN-220 GPS serial device and print a privacy-safe summary",
+        help="sample a BN-220 GPS serial device and print a privacy-safe summary; use 'auto' to probe",
     )
     parser.add_argument(
         "--bn220-baud",
@@ -63,6 +64,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=10.0,
         help="GPS capture duration in seconds for --sample-bn220 (default: 10)",
+    )
+    parser.add_argument(
+        "--discover-serial",
+        action="store_true",
+        help="probe local serial ports and identify supported sensor streams",
+    )
+    parser.add_argument(
+        "--serial-probe-duration",
+        type=float,
+        default=2.0,
+        help="seconds to spend probing each serial port for auto-discovery (default: 2)",
     )
     return parser
 
@@ -78,9 +90,29 @@ def main(argv: list[str] | None = None) -> int:
         result = run_alignment_pipeline(pipeline_input, solver)
         print("\n".join(result.report_lines))
         return 0 if result.status == "solved" else 1
+    if args.discover_serial:
+        results = discover_serial_ports(
+            baud=args.wt901_baud,
+            duration_seconds=args.serial_probe_duration,
+        )
+        print("Serial discovery summary")
+        if not results:
+            print("No candidate serial ports found.")
+            return 1
+        for result in results:
+            print(result.report_line())
+        return 0 if any(result.looks_like_wt901 or result.looks_like_bn220 for result in results) else 1
     if args.sample_wt901:
-        summary = capture_wt901(
+        port = resolve_cli_port(
             args.sample_wt901,
+            target="wt901",
+            baud=args.wt901_baud,
+            duration_seconds=args.serial_probe_duration,
+        )
+        if port is None:
+            return 1
+        summary = capture_wt901(
+            port,
             baud=args.wt901_baud,
             duration_seconds=args.wt901_duration,
             prompt=(
@@ -91,8 +123,16 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(summary.report_lines()))
         return 0 if summary.angle_samples else 1
     if args.calibrate_wt901:
-        report = capture_wt901_calibration(
+        port = resolve_cli_port(
             args.calibrate_wt901,
+            target="wt901",
+            baud=args.wt901_baud,
+            duration_seconds=args.serial_probe_duration,
+        )
+        if port is None:
+            return 1
+        report = capture_wt901_calibration(
+            port,
             baud=args.wt901_baud,
             duration_seconds=args.wt901_duration,
             prompt="Sampling WT901 calibration. Keep the unit still until capture finishes.",
@@ -100,8 +140,16 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(report.report_lines()))
         return 0 if report.status != "insufficient-data" else 1
     if args.sample_bn220:
-        summary = capture_bn220(
+        port = resolve_cli_port(
             args.sample_bn220,
+            target="bn220",
+            baud=args.bn220_baud,
+            duration_seconds=args.serial_probe_duration,
+        )
+        if port is None:
+            return 1
+        summary = capture_bn220(
+            port,
             baud=args.bn220_baud,
             duration_seconds=args.gps_duration,
             prompt="Sampling BN-220 GPS. Keep the antenna where it has sky view.",
@@ -111,6 +159,32 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.print_help()
     return 0
+
+
+def resolve_cli_port(
+    port: str,
+    *,
+    target: str,
+    baud: int,
+    duration_seconds: float,
+) -> str | None:
+    if port != "auto":
+        return port
+
+    resolved, results = resolve_sensor_port(
+        target,
+        baud=baud,
+        duration_seconds=duration_seconds,
+    )
+    target_label = "BN-220" if target == "bn220" else target.upper()
+    print(f"Auto-discovering {target_label} serial port.")
+    for result in results:
+        print(result.report_line())
+    if resolved is None:
+        print(f"No {target_label} serial stream found.")
+        return None
+    print(f"Using {resolved}.")
+    return resolved
 
 
 if __name__ == "__main__":
