@@ -107,3 +107,23 @@ When multiple serial adapters are attached, inspect the detected streams with:
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli --discover-serial
 ```
+
+Read basic Celestron NexStar hand-controller status without moving the mount:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --nexstar-status /dev/ttyUSB2
+```
+
+Validate a guarded slow-yaw plan without sending motor commands:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --plan-nexstar-slow-yaw right \
+  --nexstar-yaw-rate-deg-sec 0.2 \
+  --nexstar-yaw-duration 10 \
+  --approve-mount-motion \
+  --mount-abort-ready
+```
+
+The current prototype deliberately does not emit NexStar motor commands.

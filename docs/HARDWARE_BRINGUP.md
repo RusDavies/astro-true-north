@@ -109,6 +109,35 @@ PYTHONPATH=src python -m astro_true_north.cli --discover-serial
 If the device is not readable, add the operator user to the serial device group
 or temporarily adjust the device permissions for the session.
 
+## NexStar Hand Controller
+
+The Celestron NexStar 8SE hand-controller path was first seen as a Prolific
+PL2303 serial adapter on `/dev/ttyUSB2` at 9600 baud.
+
+Read-only status check:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --nexstar-status /dev/ttyUSB2
+```
+
+This sends only NexStar echo/version/model/status/position reads. It does not
+send slew, sync, tracking-change, or rate-control commands.
+
+Before any software-assisted slow yaw, validate the guard plan:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --plan-nexstar-slow-yaw right \
+  --nexstar-yaw-rate-deg-sec 0.2 \
+  --nexstar-yaw-duration 10 \
+  --approve-mount-motion \
+  --mount-abort-ready
+```
+
+The current CLI still emits no motor commands. The approval and abort flags
+exist to keep the safety boundary explicit before movement support is added.
+
 ## First Live Capture
 
 On 2026-07-15, the prototype decoded a live WT901 stream over `/dev/ttyUSB0` at
