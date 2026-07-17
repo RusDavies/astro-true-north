@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                 if args.wt901_overwrite:
                     channel = wt901_stream_channel(line)
                     if channel in latest_rows:
-                        latest_rows[channel] = line
+                        latest_rows[channel] = wt901_stream_dashboard_row(line)
                     print(f"\x1b[{len(overwrite_rows)}F", end="")
                     for channel in overwrite_rows:
                         print(f"\x1b[K{latest_rows[channel]}", flush=True)
@@ -339,6 +339,36 @@ def wt901_stream_channel(line: str) -> str:
     if len(parts) < 2:
         return ""
     return parts[1]
+
+
+def wt901_stream_dashboard_row(line: str) -> str:
+    parts = line.split(",")
+    if len(parts) < 15:
+        return line
+    elapsed = parts[0]
+    channel = parts[1]
+    if channel == "accel":
+        return (
+            f"accel t={elapsed}s "
+            f"accel_x_g={parts[2]} accel_y_g={parts[3]} accel_z_g={parts[4]}"
+        )
+    if channel == "gyro":
+        return (
+            f"gyro  t={elapsed}s "
+            f"gyro_x_deg_s={parts[5]} gyro_y_deg_s={parts[6]} gyro_z_deg_s={parts[7]}"
+        )
+    if channel == "angle":
+        return (
+            f"angle t={elapsed}s "
+            f"roll_deg={parts[8]} pitch_deg={parts[9]} yaw_deg={parts[10]}"
+        )
+    if channel == "mag":
+        return (
+            f"mag   t={elapsed}s "
+            f"mag_x={parts[11]} mag_y={parts[12]} mag_z={parts[13]} "
+            f"mag_magnitude={parts[14]}"
+        )
+    return line
 
 
 if __name__ == "__main__":

@@ -94,7 +94,8 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 10
 ```
 
-For a non-scrolling four-channel terminal view, add `--wt901-overwrite`:
+For a labelled, non-scrolling four-channel terminal view, add
+`--wt901-overwrite`:
 
 ```bash
 PYTHONPATH=src python -m astro_true_north.cli \

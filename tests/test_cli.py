@@ -162,10 +162,12 @@ class CliTests(unittest.TestCase):
         self.assertIn("accel: waiting for frame", output)
         self.assertIn("mag: waiting for frame", output)
         self.assertIn("\x1b[4F", output)
-        self.assertIn("0.000000,accel", output)
-        self.assertIn("0.100000,gyro", output)
-        self.assertIn("0.200000,angle", output)
-        self.assertIn("0.300000,mag", output)
+        self.assertIn("accel_x_g=1.0", output)
+        self.assertIn("gyro_z_deg_s=6.0", output)
+        self.assertIn("roll_deg=7.0", output)
+        self.assertIn("pitch_deg=8.0", output)
+        self.assertIn("yaw_deg=9.0", output)
+        self.assertIn("mag_magnitude=19.104973", output)
 
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(
