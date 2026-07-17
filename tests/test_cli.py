@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import pathlib
+import tempfile
 import unittest
 from unittest import mock
 
@@ -168,6 +169,43 @@ class CliTests(unittest.TestCase):
         self.assertIn("pitch_deg=8.0", output)
         self.assertIn("yaw_deg=9.0", output)
         self.assertIn("mag_magnitude=19.104973", output)
+
+    def test_wt901_magnetometer_yaw_fit_csv_output(self) -> None:
+        header = (
+            "elapsed_s,channel,accel_x_g,accel_y_g,accel_z_g,"
+            "gyro_x_deg_s,gyro_y_deg_s,gyro_z_deg_s,"
+            "roll_deg,pitch_deg,yaw_deg,mag_x,mag_y,mag_z,mag_magnitude\n"
+        )
+        rows = []
+        for index, relative_yaw in enumerate(range(-30, 31, 10)):
+            rows.append(
+                f"{index:.1f},mag,,,,,,,,,,"
+                f"{1000 + relative_yaw * 20},"
+                f"{-400 + relative_yaw * 9},"
+                f"{700 - relative_yaw * 3},0\n"
+            )
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = pathlib.Path(temp_dir) / "wt901.csv"
+            csv_path.write_text(header + "".join(rows), encoding="utf-8")
+            with contextlib.redirect_stdout(stdout):
+                result = main(
+                    [
+                        "--fit-wt901-mag-yaw",
+                        str(csv_path),
+                        "--mag-yaw-start-deg",
+                        "-30",
+                        "--mag-yaw-end-deg",
+                        "30",
+                    ]
+                )
+
+        self.assertEqual(result, 0)
+        output = stdout.getvalue()
+        self.assertIn("WT901 magnetometer relative-yaw fit", output)
+        self.assertIn("RMSE:", output)
+        self.assertIn("R^2:", output)
 
     def test_wt901_calibration_output(self) -> None:
         report = Wt901CalibrationReport(

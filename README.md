@@ -120,6 +120,20 @@ PYTHONPATH=src python -m astro_true_north.cli \
   --wt901-duration 15
 ```
 
+Fit relative yaw from a WT901 magnetometer CSV captured during a controlled
+large-arc sweep:
+
+```bash
+PYTHONPATH=src python -m astro_true_north.cli \
+  --fit-wt901-mag-yaw /tmp/wt901-sweep.csv \
+  --mag-yaw-start-deg -30 \
+  --mag-yaw-end-deg 30
+```
+
+If the CSV includes setup/settle time before or after the measured sweep, pass
+`--mag-yaw-start-elapsed-s` and `--mag-yaw-end-elapsed-s` to fit only the
+measured motion window.
+
 When multiple serial adapters are attached, inspect the detected streams with:
 
 ```bash

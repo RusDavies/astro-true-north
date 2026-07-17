@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import os
+from pathlib import Path
 import sys
 
 from astro_true_north import __version__
@@ -20,8 +22,11 @@ from astro_true_north.serial_discovery import discover_serial_ports, resolve_sen
 from astro_true_north.wt901 import (
     capture_wt901,
     capture_wt901_calibration,
+    fit_magnetometer_relative_yaw,
     format_wt901_stream_header,
     stream_wt901_channel_lines,
+    Wt901MagneticField,
+    Wt901MagnetometerYawPoint,
 )
 
 
@@ -71,6 +76,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--calibrate-wt901",
         metavar="PORT",
         help="capture a stationary WT901 sample and estimate first error budgets; use 'auto' to probe",
+    )
+    parser.add_argument(
+        "--fit-wt901-mag-yaw",
+        metavar="CSV",
+        help="fit relative yaw from WT901 magnetometer CSV rows captured over a controlled sweep",
+    )
+    parser.add_argument(
+        "--mag-yaw-start-deg",
+        type=float,
+        default=-30.0,
+        help="relative yaw at the start of the fitted sweep (default: -30)",
+    )
+    parser.add_argument(
+        "--mag-yaw-end-deg",
+        type=float,
+        default=30.0,
+        help="relative yaw at the end of the fitted sweep (default: 30)",
+    )
+    parser.add_argument(
+        "--mag-yaw-start-elapsed-s",
+        type=float,
+        default=None,
+        help="WT901 CSV elapsed_s where the fitted sweep starts (default: first mag row)",
+    )
+    parser.add_argument(
+        "--mag-yaw-end-elapsed-s",
+        type=float,
+        default=None,
+        help="WT901 CSV elapsed_s where the fitted sweep ends (default: last mag row)",
     )
     parser.add_argument(
         "--sample-bn220",
@@ -246,6 +280,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("\n".join(report.report_lines()))
         return 0 if report.status != "insufficient-data" else 1
+    if args.fit_wt901_mag_yaw:
+        try:
+            points = load_wt901_mag_yaw_points_from_csv(
+                Path(args.fit_wt901_mag_yaw),
+                start_yaw_deg=args.mag_yaw_start_deg,
+                end_yaw_deg=args.mag_yaw_end_deg,
+                start_elapsed_s=args.mag_yaw_start_elapsed_s,
+                end_elapsed_s=args.mag_yaw_end_elapsed_s,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"WT901 magnetometer yaw fit failed: {exc}")
+            return 1
+        fit = fit_magnetometer_relative_yaw(points)
+        print("\n".join(fit.report_lines()))
+        return 0 if fit.status == "fit" else 1
     if args.sample_bn220:
         port = resolve_cli_port(
             args.sample_bn220,
@@ -369,6 +418,56 @@ def wt901_stream_dashboard_row(line: str) -> str:
             f"mag_magnitude={parts[14]}"
         )
     return line
+
+
+def load_wt901_mag_yaw_points_from_csv(
+    path: Path,
+    *,
+    start_yaw_deg: float,
+    end_yaw_deg: float,
+    start_elapsed_s: float | None,
+    end_elapsed_s: float | None,
+) -> list[Wt901MagnetometerYawPoint]:
+    rows: list[tuple[float, Wt901MagneticField]] = []
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        required = {"elapsed_s", "channel", "mag_x", "mag_y", "mag_z"}
+        missing = required - set(reader.fieldnames or ())
+        if missing:
+            raise ValueError(f"missing required CSV column(s): {', '.join(sorted(missing))}")
+        for row in reader:
+            if row.get("channel") != "mag":
+                continue
+            if not row.get("mag_x") or not row.get("mag_y") or not row.get("mag_z"):
+                continue
+            rows.append(
+                (
+                    float(row["elapsed_s"]),
+                    Wt901MagneticField(
+                        int(float(row["mag_x"])),
+                        int(float(row["mag_y"])),
+                        int(float(row["mag_z"])),
+                    ),
+                )
+            )
+    if not rows:
+        raise ValueError("no WT901 magnetometer rows found")
+
+    first_elapsed = rows[0][0] if start_elapsed_s is None else start_elapsed_s
+    last_elapsed = rows[-1][0] if end_elapsed_s is None else end_elapsed_s
+    if last_elapsed <= first_elapsed:
+        raise ValueError("fit end elapsed time must be after start elapsed time")
+
+    points: list[Wt901MagnetometerYawPoint] = []
+    for elapsed, magnetic_field in rows:
+        if elapsed < first_elapsed or elapsed > last_elapsed:
+            continue
+        fraction = (elapsed - first_elapsed) / (last_elapsed - first_elapsed)
+        relative_yaw = start_yaw_deg + fraction * (end_yaw_deg - start_yaw_deg)
+        points.append(Wt901MagnetometerYawPoint(relative_yaw, magnetic_field))
+    if not points:
+        raise ValueError("no WT901 magnetometer rows inside requested fit window")
+    return points
 
 
 if __name__ == "__main__":
