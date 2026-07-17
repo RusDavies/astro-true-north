@@ -8,6 +8,7 @@ from unittest import mock
 
 from astro_true_north.bn220 import Bn220CaptureSummary, Bn220GpsFix
 from astro_true_north.cli import main
+from astro_true_north.nexstar import NexStarProtocolError, NexStarStatus
 from astro_true_north.wt901 import (
     Wt901Angle,
     Wt901CalibrationReport,
@@ -183,6 +184,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         capture.assert_called_once()
         self.assertIn("BN-220 GPS sample summary", stdout.getvalue())
+
+    def test_nexstar_status_output(self) -> None:
+        status = NexStarStatus(
+            port="/dev/ttyUSB2",
+            version_major=5,
+            version_minor=31,
+            model_code=12,
+            model_name="6/8 SE",
+            alignment_complete=False,
+            goto_in_progress=False,
+            tracking_mode=0,
+            azimuth_deg=0.0,
+            altitude_deg=0.0,
+        )
+        stdout = io.StringIO()
+
+        with (
+            mock.patch("astro_true_north.cli.query_nexstar_status", return_value=status) as query,
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(["--nexstar-status", "/dev/ttyUSB2"])
+
+        self.assertEqual(result, 0)
+        query.assert_called_once()
+        self.assertIn("NexStar on /dev/ttyUSB2", stdout.getvalue())
+
+    def test_nexstar_status_reports_read_failure(self) -> None:
+        stdout = io.StringIO()
+
+        with (
+            mock.patch(
+                "astro_true_north.cli.query_nexstar_status",
+                side_effect=NexStarProtocolError("timed out"),
+            ),
+            contextlib.redirect_stdout(stdout),
+        ):
+            result = main(["--nexstar-status", "/dev/ttyUSB2"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("NexStar status read failed", stdout.getvalue())
+
+    def test_nexstar_slow_yaw_plan_requires_approval(self) -> None:
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            result = main(["--plan-nexstar-slow-yaw", "right"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("locked", stdout.getvalue())
+
+    def test_nexstar_slow_yaw_plan_output(self) -> None:
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            result = main(
+                [
+                    "--plan-nexstar-slow-yaw",
+                    "right",
+                    "--nexstar-yaw-rate-deg-sec",
+                    "0.2",
+                    "--nexstar-yaw-duration",
+                    "10",
+                    "--approve-mount-motion",
+                    "--mount-abort-ready",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        output = stdout.getvalue()
+        self.assertIn("NexStar slow-yaw plan validated", output)
+        self.assertIn("Motor command emission: disabled", output)
 
 
 if __name__ == "__main__":

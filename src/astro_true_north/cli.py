@@ -6,6 +6,12 @@ import argparse
 
 from astro_true_north import __version__
 from astro_true_north.bn220 import capture_bn220
+from astro_true_north.nexstar import (
+    MountMotionLockedError,
+    NexStarProtocolError,
+    query_nexstar_status,
+    validate_slow_yaw_plan,
+)
 from astro_true_north.pipeline import load_fixture_pipeline, run_alignment_pipeline
 from astro_true_north.serial_discovery import discover_serial_ports, resolve_sensor_port
 from astro_true_north.wt901 import capture_wt901, capture_wt901_calibration
@@ -75,6 +81,45 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=2.0,
         help="seconds to spend probing each serial port for auto-discovery (default: 2)",
+    )
+    parser.add_argument(
+        "--nexstar-status",
+        metavar="PORT",
+        help="read basic NexStar hand-controller status without moving the mount",
+    )
+    parser.add_argument(
+        "--nexstar-baud",
+        type=int,
+        default=9600,
+        help="NexStar hand-controller serial baud rate (default: 9600)",
+    )
+    parser.add_argument(
+        "--plan-nexstar-slow-yaw",
+        choices=("left", "right"),
+        metavar="DIRECTION",
+        help="validate a guarded NexStar slow-yaw plan without sending motor commands",
+    )
+    parser.add_argument(
+        "--nexstar-yaw-rate-deg-sec",
+        type=float,
+        default=0.25,
+        help="planned NexStar yaw rate in degrees per second (default: 0.25)",
+    )
+    parser.add_argument(
+        "--nexstar-yaw-duration",
+        type=float,
+        default=30.0,
+        help="planned NexStar yaw duration in seconds (default: 30)",
+    )
+    parser.add_argument(
+        "--approve-mount-motion",
+        action="store_true",
+        help="explicitly approve the planned mount motion",
+    )
+    parser.add_argument(
+        "--mount-abort-ready",
+        action="store_true",
+        help="confirm a stop/abort path is ready for the planned mount motion",
     )
     return parser
 
@@ -156,6 +201,31 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("\n".join(summary.report_lines()))
         return 0 if summary.fix and summary.fix.has_fix else 1
+    if args.nexstar_status:
+        try:
+            status = query_nexstar_status(
+                args.nexstar_status,
+                baud=args.nexstar_baud,
+            )
+        except (NexStarProtocolError, OSError) as exc:
+            print(f"NexStar status read failed: {exc}")
+            return 1
+        print("\n".join(status.report_lines()))
+        return 0
+    if args.plan_nexstar_slow_yaw:
+        try:
+            plan = validate_slow_yaw_plan(
+                direction=args.plan_nexstar_slow_yaw,
+                rate_deg_per_sec=args.nexstar_yaw_rate_deg_sec,
+                duration_seconds=args.nexstar_yaw_duration,
+                operator_approved=args.approve_mount_motion,
+                abort_ready=args.mount_abort_ready,
+            )
+        except MountMotionLockedError as exc:
+            print(f"NexStar slow-yaw plan locked: {exc}")
+            return 1
+        print("\n".join(plan.report_lines()))
+        return 0
 
     parser.print_help()
     return 0
